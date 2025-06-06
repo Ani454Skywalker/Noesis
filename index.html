@@ -1,0 +1,1562 @@
+!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with Noesis</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font from Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- PDF.js library for parsing PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script>
+        // Set the workerSrc for pdf.js to ensure it can load its worker script
+        // This is crucial for pdf.js to function correctly in the browser.
+        // Ensure this path is correct and accessible.
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        } else {
+            console.error("PDF.js library (pdfjsLib) not found. PDF functionality will not work.");
+            // Display an error to the user if PDF.js is not loaded
+            document.addEventListener('DOMContentLoaded', () => {
+                showCustomModal("PDF Library Error", "The PDF processing library could not be loaded. Please check your internet connection or try refreshing the page.");
+            });
+        }
+    </script>
+    <style>
+        /* Apply Inter font to the entire body and set a base font size */
+        body {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.875rem; /* text-sm equivalent */
+        }
+        /* Custom scrollbar styling for the chat messages area */
+        .chat-messages::-webkit-scrollbar {
+            width: 8px; /* Width of the scrollbar */
+        }
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1; /* Color of the track */
+            border-radius: 10px; /* Rounded corners for the track */
+        }
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #888; /* Color of the scrollbar thumb */
+            border-radius: 10px; /* Rounded corners for the thumb */
+        }
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #555; /* Color of the thumb on hover */
+        }
+        /* Make chat messages "floating" by removing background/borders */
+        .chat-message-bubble {
+            padding: 0.25rem 0.5rem; /* Reduced padding for more fluid text */
+            margin-bottom: 0.25rem; /* Small margin between lines */
+            word-wrap: break-word; /* Ensure long words break */
+            background-color: transparent; /* Remove background */
+            border: none; /* Remove border */
+            box-shadow: none; /* Remove shadow */
+            max-width: 100%; /* Allow full width to utilize space */
+            font-size: 0.875rem; /* Consistent smaller font size */
+        }
+
+        .chat-message-user {
+            text-align: right;
+            margin-left: auto;
+            color: #1a202c; /* Darker text for user messages */
+        }
+        .chat-message-assistant {
+            text-align: left;
+            margin-right: auto;
+            color: #2d3748; /* Darker text for assistant messages */
+        }
+        /* Styling for sidebar elements and modal elements to make them float */
+        .floating-element-container {
+            background-color: transparent;
+            border: none;
+            box-shadow: none;
+            padding: 0;
+            margin-bottom: 1.5rem; /* Space below the button */
+        }
+        .floating-list-item {
+            background-color: transparent;
+            border: none;
+            box-shadow: none;
+            padding: 0;
+            margin-bottom: 0.25rem;
+            font-size: 0.875rem; /* Consistent smaller font size */
+        }
+        .modal-floating-content {
+            background-color: transparent;
+            border: none;
+            box-shadow: none;
+            padding: 0;
+        }
+        /* Styling for the initial input field to remove lines/border */
+        #initial-user-input, #user-input {
+            border: none;
+            box-shadow: none;
+            padding: 0.75rem 1.25rem; /* Slightly reduced padding */
+            height: auto; /* Allow height to adjust */
+            line-height: normal;
+            font-size: 0.875rem; /* Consistent smaller font size */
+            background-color: white; /* Ensure input has a background */
+        }
+        /* Adjust heading sizes for smaller font */
+        .text-3xl-adjusted {
+            font-size: 2rem; /* Adjusted from 3xl */
+            line-height: 2.5rem; /* Ensure proper line spacing */
+        }
+        .text-2xl-adjusted {
+            font-size: 1.5rem; /* Adjusted from 2xl */
+        }
+        .text-lg-adjusted {
+            font-size: 1.125rem; /* Adjusted from lg */
+        }
+        /* Ensure initial greeting text wraps correctly */
+        #initial-greeting-screen h1 {
+            max-width: 90%; /* Limit width to prevent overflow on smaller screens */
+            margin-left: auto;
+            margin-right: auto;
+        }
+        /* Style for active tab in library modal */
+        .current-tab-active-style {
+            border-color: #3B82F6; /* Tailwind's blue-500 */
+            color: #3B82F6;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center text-sm">
+    <!-- Main container for the entire application, making it responsive -->
+    <div class="flex flex-col md:flex-row w-full bg-white shadow-lg rounded-none overflow-hidden h-screen max-w-full">
+        <!-- Left Sidebar for New Chat and Library -->
+        <div class="w-full md:w-1/4 bg-gray-50 p-6 border-r border-gray-200 flex flex-col items-center justify-start py-8 overflow-y-auto">
+            <!-- User ID Display -->
+            <div id="user-id-display" class="text-xs text-gray-500 mb-4 text-center break-all w-full px-2">
+                User ID: Loading...
+            </div>
+
+            <!-- New Chat Button (moved to top of sidebar) -->
+            <button id="new-chat-sidebar-button" class="w-full bg-blue-600 text-white px-6 py-3 rounded-full shadow-md hover:bg-blue-700 transition duration-200 flex items-center justify-center space-x-2 mb-6 text-base font-semibold">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                <span>New Chat</span>
+            </button>
+
+            <!-- Library Button (now opens a modal) - subtle style -->
+            <button id="open-library-modal-button" class="cursor-pointer bg-gray-100 text-gray-800 px-6 py-3 rounded-full shadow-sm hover:bg-gray-200 transition-all duration-300 ease-in-out flex items-center space-x-2 floating-element-container border border-gray-300 text-base font-medium">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Library</span>
+            </button>
+
+            <!-- Loading indicator for general AI operations -->
+            <div id="loading-indicator" class="mt-4 text-sm text-blue-600 hidden floating-element-container">
+                <div class="flex items-center space-x-2">
+                    <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="loading-message">Thinking...</span>
+                </div>
+            </div>
+            <div id="upload-status" class="mt-4 text-sm text-gray-700 text-center floating-element-container">No PDFs uploaded yet.</div>
+            <ul id="uploaded-file-list" class="mt-4 text-sm text-gray-800 list-disc list-inside space-y-1">
+                <!-- Uploaded file names will be listed here -->
+            </ul>
+        </div>
+
+        <!-- Right Main Chat Area -->
+        <div class="flex-1 flex flex-col relative">
+            <!-- New button for Previous Conversations (top right) -->
+            <button id="show-previous-conversations-button" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-gray-200 text-indigo-700 flex items-center justify-center shadow-md hover:bg-gray-300 transition duration-200 z-20" title="Previous Conversations">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+            </button>
+
+            <!-- Initial Greeting Screen (visible first, then hidden, *and centered*) -->
+            <div id="initial-greeting-screen" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10 bg-gray-50">
+                <h1 class="text-3xl-adjusted font-semibold text-gray-800 mb-8">Hello! My name is Noesis. How can I help you today?</h1>
+                <div class="w-full max-w-xl flex flex-col items-center space-y-4">
+                    <div class="flex items-center w-full bg-white rounded-xl shadow-md p-2">
+                        <input type="text" id="initial-user-input" placeholder="Ask Noesis..." class="flex-1 px-4 py-2 text-lg-adjusted text-gray-800 outline-none">
+                        <button id="initial-send-button" class="ml-2 bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 transition duration-200 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                            </svg>
+                        </button>
+                    </div>
+                    <!-- Context buttons below initial input -->
+                    <div class="flex space-x-2 justify-start w-full px-4">
+                        <button id="initial-library-context-button" class="px-4 py-2 rounded-full text-sm font-medium transition duration-200 bg-gray-200 text-gray-800 hover:bg-gray-300" data-mode="library">
+                            Library Context
+                        </button>
+                        <button id="initial-deep-search-button" class="px-4 py-2 rounded-full text-sm font-medium transition duration-200 bg-gray-200 text-gray-800 hover:bg-gray-300" data-mode="deep_search">
+                            Deep Search (Backend)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main chat history display area (hidden initially, extends to top) -->
+            <div id="chat-history-display" class="flex-1 w-full p-6 overflow-y-auto space-y-4 chat-messages hidden">
+                <!-- Chat messages will appear here -->
+            </div>
+
+            <!-- Fixed chat input and context buttons at the bottom (always visible) -->
+            <div id="main-chat-input-area" class="p-6 bg-white border-t border-gray-200 flex flex-col space-y-3 hidden">
+                <!-- User input text field and Send button -->
+                <div class="flex items-center space-x-4">
+                    <input type="text" id="user-input" placeholder="Type your message..." class="flex-1 px-4 py-3 text-gray-800 outline-none">
+                    
+                    <!-- Send message button -->
+                    <button id="send-button" class="bg-blue-600 text-white px-6 py-3 rounded-lg shadow-md hover:bg-blue-700 transition duration-200 flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                        <span>Send</span>
+                    </button>
+                </div>
+                
+                <!-- Context buttons below the message input -->
+                <div class="flex space-x-2 justify-start flex-wrap gap-2">
+                    <button id="library-context-button" class="px-4 py-2 rounded-full text-sm font-medium transition duration-200 bg-gray-200 text-gray-800 hover:bg-gray-300 border border-gray-300 shadow-sm" data-mode="library">
+                        Library Context
+                    </button>
+                    <button id="deep-search-button" class="px-4 py-2 rounded-full text-sm font-medium transition duration-200 bg-gray-200 text-gray-800 hover:bg-gray-300" data-mode="deep_search">
+                        Deep Search (Backend)
+                    </button>
+                    <button id="summarize-chat-button" class="px-4 py-2 rounded-full text-sm font-medium bg-gray-200 text-gray-800 hover:bg-gray-300 transition duration-200 border border-gray-300 shadow-sm">
+                        Summarize Chat
+                    </button>
+                    <button id="suggest-questions-button" class="px-4 py-2 rounded-full text-sm font-medium bg-gray-200 text-gray-800 hover:bg-gray-300 transition duration-200 border border-gray-300 shadow-sm">
+                        Suggest Next Questions
+                    </button>
+                    <button id="rewrite-last-message-button" class="px-4 py-2 rounded-full text-sm font-medium bg-gray-200 text-gray-800 hover:bg-gray-300 transition duration-200 border border-gray-300 shadow-sm">
+                        Rewrite Last Message
+                    </button>
+                    <button id="translate-message-button" class="px-4 py-2 rounded-full text-sm font-medium bg-gray-200 text-gray-800 hover:bg-gray-300 transition duration-200 border border-gray-300 shadow-sm">
+                        Translate Last Message
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Modal for Alerts/Confirmations (replaces alert() and confirm()) -->
+    <div id="custom-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
+            <h3 id="modal-title" class="text-2xl-adjusted font-bold mb-4 text-gray-800"></h3>
+            <p id="modal-message" class="text-gray-700 mb-6"></p>
+            <button id="modal-close-button" class="bg-blue-600 text-white px-6 py-3 rounded-lg shadow hover:bg-blue-700 transition duration-200">OK</button>
+        </div>
+    </div>
+
+    <!-- Modal for user input (e.g., for rewrite tone) -->
+    <div id="input-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
+            <h3 id="input-modal-title" class="text-2xl-adjusted font-bold mb-4 text-gray-800"></h3>
+            <p id="input-modal-message" class="text-gray-700 mb-4"></p>
+            <input type="text" id="input-modal-field" class="w-full px-4 py-2 border rounded-md mb-6 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <button id="input-modal-confirm-button" class="bg-blue-600 text-white px-6 py-3 rounded-lg shadow hover:bg-blue-700 transition duration-200 mr-2">Confirm</button>
+            <button id="input-modal-cancel-button" class="bg-gray-300 text-gray-800 px-6 py-3 rounded-lg shadow hover:bg-gray-400 transition duration-200">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Library Modal (combining upload and view content) -->
+    <div id="library-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-white p-8 rounded-lg shadow-xl max-w-md w-full flex flex-col max-h-[90vh]">
+            <h3 class="text-2xl-adjusted font-bold mb-6 text-gray-800 text-center">Manage Library</h3>
+            
+            <!-- Tabs for Upload vs. View -->
+            <div class="flex mb-4 border-b border-gray-200">
+                <button id="tab-upload-pdfs" class="flex-1 py-2 text-center text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-blue-600 hover:border-blue-600 focus:outline-none current-tab-active-style">
+                    Upload PDFs
+                </button>
+                <button id="tab-view-content" class="flex-1 py-2 text-center text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-blue-600 hover:border-blue-600 focus:outline-none">
+                    View Content
+                </button>
+            </div>
+
+            <!-- Upload PDFs Section -->
+            <div id="section-upload-pdfs" class="flex-1 overflow-y-auto mb-6">
+                <label for="pdf-file-input" class="cursor-pointer bg-gray-100 text-gray-800 px-6 py-3 rounded-full shadow-sm hover:bg-gray-200 transition-all duration-300 ease-in-out flex items-center justify-center space-x-2 mb-6 modal-floating-content border border-gray-300 text-base font-medium">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Select PDF Files</span>
+                    <input type="file" id="pdf-file-input" multiple accept=".pdf" class="hidden">
+                </label>
+
+                <div id="modal-loading-indicator" class="mt-4 text-sm text-blue-600 hidden modal-floating-content">
+                    <div class="flex items-center space-x-2">
+                        <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Processing PDFs...</span>
+                    </div>
+                </div>
+                <div id="modal-upload-status" class="mt-4 text-sm text-gray-700 text-center modal-floating-content">No PDFs selected yet.</div>
+                <ul id="modal-uploaded-file-list" class="mt-4 text-sm text-gray-800 list-disc list-inside space-y-1 overflow-y-auto flex-1 modal-floating-content">
+                    <!-- Uploaded file names will be listed here -->
+                </ul>
+            </div>
+
+            <!-- View Content Section -->
+            <div id="section-view-content" class="flex-1 overflow-y-auto mb-6 hidden">
+                <p id="library-content-display" class="text-gray-700 text-sm whitespace-pre-wrap">No library content available. Please upload PDFs first.</p>
+            </div>
+
+            <button id="close-library-modal-button" class="w-full bg-gray-300 text-gray-800 px-5 py-2 rounded-lg shadow hover:bg-gray-400 transition duration-200 mt-6 text-base">
+                Close
+            </button>
+        </div>
+    </div>
+
+
+    <!-- Conversation Management Modal -->
+    <div id="conversation-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-white p-8 rounded-lg shadow-xl max-w-md w-full flex flex-col max-h-[90vh]">
+            <h3 class="text-2xl-adjusted font-bold mb-6 text-gray-800 text-center">Manage Conversations</h3>
+            
+            <!-- Load/New Conversation Section -->
+            <div class="flex-1 overflow-y-auto mb-6">
+                <h4 class="text-lg-adjusted font-semibold mb-3 text-gray-700">Saved Conversations</h4>
+                <ul id="saved-conversations-list" class="space-y-2">
+                    <!-- Saved conversations will be loaded here -->
+                    <li class="text-gray-500 text-center">No saved conversations yet.</li>
+                </ul>
+            </div>
+
+            <!-- Removed "Start New Conversation" button from here -->
+            <button id="close-conversation-modal-button" class="w-full bg-gray-300 text-gray-800 px-5 py-2 rounded-lg shadow hover:bg-gray-400 transition duration-200 text-base">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables for Noesis app
+        let uploadedLibraryText = ""; // Raw text from PDFs
+        let documentChunks = []; // Array of text chunks from PDFs
+        const chatHistory = []; // Current active conversation chat history
+        let currentConversationId = null; // ID of the currently loaded conversation
+        let userId = null; // User ID from Firebase Auth
+        let db; // Firestore instance
+        let auth; // Auth instance
+        let app; // Firebase app instance
+        let currentSearchMode = 'general'; // 'general', 'library', 'deep_search'
+        let firstMessageSent = false; // Flag to track if the first message has been sent
+        const MIN_MESSAGES_FOR_TITLE = 3; // Minimum messages in chat history to generate a title
+        let loadingConversation = false; // Flag to prevent `addMessage` from modifying `chatHistory` during load
+
+        // API key for Gemini. Used for direct AI calls from the frontend (General, Library, Summarize, Suggest)
+        const apiKey = "AIzaSyDQJcEKBAhdgBoOKOOxRfb7O3w1ST7LexI"; 
+        
+        // --- Firebase Configuration ---
+const firebaseConfig = {
+  apiKey: "AIzaSyA9e0HTjtATZ5MqIVxYtieIqY8Z-vuLI4E",
+  authDomain: "noesis-a5e66.firebaseapp.com",
+  projectId: "noesis-a5e66",
+  storageBucket: "noesis-a5e66.firebasestorage.app",
+  messagingSenderId: "477398599775",
+  appId: "1:477398599775:web:3d85f118dcd865446fb3ea",
+  measurementId: "G-4WE1FTX3ZT"
+};
+
+        // __app_id is provided by the Canvas environment for Firestore pathing.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+
+        // Backend server URL - ONLY for Deep Search
+        const BACKEND_URL = 'http://localhost:3000';
+
+        /**
+         * Initializes Firebase and authenticates the user.
+         * Tries to sign in with a custom token if available, otherwise anonymously.
+         * Sets up an auth state observer to get the user ID.
+         */
+        async function initializeFirebase() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Authenticate user
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                    console.log("Signed in with custom token.");
+                } else {
+                    await signInAnonymously(auth);
+                    console.log("Signed in anonymously.");
+                }
+
+                // Listen for authentication state changes
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('user-id-display').textContent = `User ID: ${userId}`;
+                        console.log("User authenticated:", userId);
+                        // Once authenticated, attempt to auto-save the initial conversation if needed
+                        autoSaveConversation(); 
+                    } else {
+                        userId = null;
+                        document.getElementById('user-id-display').textContent = 'User ID: Not authenticated';
+                        console.log("User not authenticated.");
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error initializing Firebase or signing in:", error);
+                showCustomModal("Authentication Error", `Failed to initialize Firebase or authenticate: ${error.message}. Please ensure Firebase is set up correctly (check console for config details) and Anonymous Authentication is enabled in your Firebase project under the 'Authentication' section.`);
+            }
+        }
+
+        /**
+         * Displays a custom modal dialog instead of using native alert() or confirm().
+         * @param {string} title - The title of the modal.
+         * @param {string} message - The message content of the modal.
+         * @param {boolean} showConfirmButtons - If true, replaces OK button with Delete/Cancel.
+         * @param {Function} onConfirm - Callback for confirm action (e.g., for delete).
+         * @param {Function} onCancel - Callback for cancel action.
+         */
+        function showCustomModal(title, message, showConfirmButtons = false, onConfirm = null, onCancel = null) {
+            const modal = document.getElementById('custom-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalMessage = document.getElementById('modal-message');
+            const modalFooter = modal.querySelector('div'); // Get the inner div containing buttons
+            const originalCloseButton = document.getElementById('modal-close-button');
+
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+
+            // Clear previous custom buttons, except the original 'OK' button if it exists
+            const existingButtons = Array.from(modalFooter.children);
+            for (const child of existingButtons) {
+                if (child.tagName === 'BUTTON' && child.id !== 'modal-close-button') {
+                    child.remove();
+                }
+            }
+
+            if (showConfirmButtons) {
+                originalCloseButton.style.display = 'none'; // Hide default OK button
+
+                const confirmButton = document.createElement('button');
+                confirmButton.textContent = "Delete";
+                confirmButton.classList.add('bg-red-600', 'text-white', 'px-6', 'py-3', 'rounded-lg', 'shadow', 'hover:bg-red-700', 'transition', 'duration-200', 'mr-2');
+                confirmButton.onclick = () => {
+                    modal.classList.add('hidden');
+                    if (onConfirm) onConfirm();
+                    // Restore original buttons for next use
+                    originalCloseButton.style.display = '';
+                    confirmButton.remove();
+                    cancelButton.remove();
+                };
+
+                const cancelButton = document.createElement('button');
+                cancelButton.textContent = "Cancel";
+                cancelButton.classList.add('bg-gray-300', 'text-gray-800', 'px-6', 'py-3', 'rounded-lg', 'shadow', 'hover:bg-gray-400', 'transition', 'duration-200');
+                cancelButton.onclick = () => {
+                    modal.classList.add('hidden');
+                    if (onCancel) onCancel();
+                    // Restore original buttons for next use
+                    originalCloseButton.style.display = '';
+                    confirmButton.remove();
+                    cancelButton.remove();
+                };
+
+                modalFooter.appendChild(confirmButton);
+                modalFooter.appendChild(cancelButton);
+            } else {
+                originalCloseButton.style.display = ''; // Show default OK button
+                originalCloseButton.onclick = () => {
+                    modal.classList.add('hidden');
+                };
+            }
+
+            modal.classList.remove('hidden'); // Show the modal
+        }
+
+        /**
+         * Shows a modal that prompts the user for text input.
+         * @param {string} title - The title of the input modal.
+         * @param {string} message - The message/instruction for the user.
+         * @param {string} placeholder - Placeholder text for the input field.
+         * @returns {Promise<string|null>} A promise that resolves with the user's input or null if canceled.
+         */
+        function showInputModal(title, message, placeholder = '') {
+            return new Promise(resolve => {
+                const modal = document.getElementById('input-modal');
+                const modalTitle = document.getElementById('input-modal-title');
+                const modalMessage = document.getElementById('input-modal-message');
+                const inputField = document.getElementById('input-modal-field');
+                const confirmButton = document.getElementById('input-modal-confirm-button');
+                const cancelButton = document.getElementById('input-modal-cancel-button');
+
+                modalTitle.textContent = title;
+                modalMessage.textContent = message;
+                inputField.value = ''; // Clear previous input
+                inputField.placeholder = placeholder;
+
+                // Event listeners for the modal buttons
+                const confirmHandler = () => {
+                    modal.classList.add('hidden');
+                    confirmButton.removeEventListener('click', confirmHandler);
+                    cancelButton.removeEventListener('click', cancelHandler);
+                    resolve(inputField.value.trim());
+                };
+
+                const cancelHandler = () => {
+                    modal.classList.add('hidden');
+                    confirmButton.removeEventListener('click', confirmHandler);
+                    cancelButton.removeEventListener('click', cancelHandler);
+                    resolve(null);
+                };
+
+                confirmButton.addEventListener('click', confirmHandler);
+                cancelButton.addEventListener('click', cancelHandler);
+
+                // Allow 'Enter' key to confirm
+                inputField.addEventListener('keypress', function keyHandler(event) {
+                    if (event.key === 'Enter') {
+                        confirmHandler();
+                        inputField.removeEventListener('keypress', keyHandler); // Remove to prevent multiple calls
+                    }
+                });
+
+                modal.classList.remove('hidden'); // Show the modal
+                inputField.focus(); // Focus the input field
+            });
+        }
+
+
+        /**
+         * Adds a message to the chat display and pushes it to the chat history array.
+         * Optionally appends sources below the message.
+         * @param {string} sender - 'user' or 'assistant'.
+         * @param {string} message - The message content.
+         * @param {Array<Object>} [sources=[]] - Optional array of source objects ({title, url, content}).
+         */
+        function addMessage(sender, message, sources = []) {
+            const chatMessagesDiv = document.getElementById('chat-history-display');
+            const messageDiv = document.createElement('div');
+            // Apply floating text styles
+            messageDiv.classList.add('chat-message-bubble', 'flex', 'flex-col'); // Added flex-col for stacking message and sources
+
+            let senderClass = '';
+            let textColorClass = '';
+
+            if (sender === 'user') {
+                senderClass = 'justify-end ml-auto chat-message-user';
+                textColorClass = 'text-gray-900'; // Darker text for user messages
+            } else {
+                senderClass = 'justify-start mr-auto chat-message-assistant';
+                textColorClass = 'text-gray-700'; // Slightly lighter text for assistant messages
+            }
+
+            messageDiv.className += ` ${senderClass}`;
+
+            let sourcesHtml = '';
+            if (sources.length > 0) {
+                sourcesHtml = `
+                    <div class="text-xs text-gray-500 mt-2 p-2 rounded-md bg-gray-50 border border-gray-200 shadow-inner">
+                        <strong class="text-gray-700">Sources:</strong>
+                        <ul class="list-disc list-inside mt-1 space-y-0.5">
+                            ${sources.map(source => `
+                                <li>
+                                    <a href="${source.url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">
+                                        ${source.title || source.url}
+                                    </a>
+                                    <span class="ml-1 text-gray-500">${source.content ? '- ' + source.content.substring(0, Math.min(100, source.content.length)) + (source.content.length > 100 ? '...' : '') : ''}</span>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            messageDiv.innerHTML = `
+                <div class="flex-grow ${textColorClass}">
+                    <p>${message.replace(/\*/g, '')}</p> <!-- Removed asterisk replacement as per user request to enable essay-like format-->
+                </div>
+                ${sourcesHtml}
+            `;
+
+            chatMessagesDiv.appendChild(messageDiv);
+            chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+
+            // Update chat history only if it's a new message being added, not when loading existing ones.
+            if (!loadingConversation) { 
+                // Store sources along with the message for persistence
+                chatHistory.push({ role: sender === 'user' ? 'user' : 'model', parts: [{ text: message }], sources: sources });
+            }
+        }
+
+
+        /**
+         * Updates the styling of the context buttons based on the active mode.
+         */
+        function updateContextButtonStyling() {
+            // Buttons in the main chat area
+            const libraryBtn = document.getElementById('library-context-button');
+            const deepSearchBtn = document.getElementById('deep-search-button');
+            const summarizeBtn = document.getElementById('summarize-chat-button');
+            const suggestBtn = document.getElementById('suggest-questions-button');
+            const rewriteBtn = document.getElementById('rewrite-last-message-button'); // New
+            const translateBtn = document.getElementById('translate-message-button'); // New
+
+            // Buttons in the initial greeting area
+            const initialLibraryBtn = document.getElementById('initial-library-context-button');
+            const initialDeepSearchBtn = document.getElementById('initial-deep-search-button');
+
+            // Reset all context/LLM-powered buttons to default subtle style (gray)
+            [libraryBtn, deepSearchBtn, summarizeBtn, suggestBtn, rewriteBtn, translateBtn, initialLibraryBtn, initialDeepSearchBtn].forEach(btn => {
+                // Ensure all relevant classes are removed before adding new ones
+                btn.classList.remove('bg-blue-600', 'text-white', 'hover:bg-blue-700', 'bg-purple-500', 'hover:bg-purple-600', 'bg-green-500', 'hover:bg-green-600');
+                btn.classList.add('bg-gray-200', 'text-gray-800', 'hover:bg-gray-300', 'border', 'border-gray-300', 'shadow-sm');
+            });
+
+            // Apply active style to the currently selected search mode button
+            if (currentSearchMode === 'library') {
+                libraryBtn.classList.remove('bg-gray-200', 'text-gray-800', 'hover:bg-gray-300');
+                libraryBtn.classList.add('bg-blue-600', 'text-white', 'hover:bg-blue-700');
+                if (initialLibraryBtn) { 
+                    initialLibraryBtn.classList.remove('bg-gray-200', 'text-gray-800', 'hover:bg-gray-300');
+                    initialLibraryBtn.classList.add('bg-blue-600', 'text-white', 'hover:bg-blue-700');
+                }
+            } else if (currentSearchMode === 'deep_search') {
+                deepSearchBtn.classList.remove('bg-gray-200', 'text-gray-800', 'hover:bg-gray-300');
+                deepSearchBtn.classList.add('bg-blue-600', 'text-white', 'hover:bg-blue-700');
+                if (initialDeepSearchBtn) {
+                    initialDeepSearchBtn.classList.remove('bg-gray-200', 'text-gray-800', 'hover:bg-gray-300');
+                    initialDeepSearchBtn.classList.add('bg-blue-600', 'text-white', 'hover:bg-blue-700');
+                }
+            }
+            // For general mode, no specific button is highlighted as it's the default
+        }
+
+        /**
+         * Clears the chat display and current chat history, then sets up the initial greeting screen.
+         * This function is called when a user explicitly starts a new conversation.
+         */
+        async function startNewConversation() {
+            document.getElementById('chat-history-display').innerHTML = ''; // Clear chat display
+            chatHistory.length = 0; // Clear chat history array
+            currentConversationId = null; // No conversation loaded
+            currentSearchMode = 'general'; // Reset search mode
+            updateContextButtonStyling(); // Update button styling
+
+            // Show initial greeting screen, hide chat history and main input
+            document.getElementById('initial-greeting-screen').classList.remove('hidden'); // Ensure greeting is visible
+            document.getElementById('chat-history-display').classList.add('hidden');
+            document.getElementById('main-chat-input-area').classList.add('hidden');
+            
+            document.getElementById('initial-user-input').value = ''; // Clear initial input
+            document.getElementById('user-input').value = ''; // Clear main input
+            document.getElementById('conversation-modal').classList.add('hidden'); // Hide conversation modal
+            document.getElementById('library-modal').classList.add('hidden'); // Hide library modal too
+
+            firstMessageSent = false; // Reset flag for new conversation
+            
+            // Add Noesis's initial greeting directly to the chat history *after* the UI is ready
+            // and then immediately auto-save it to create the new conversation entry.
+            // Only add greeting if not already present (prevents duplicates on reload/new chat)
+            if (chatHistory.length === 0 || chatHistory[0].parts[0].text !== 'Hello! My name is Noesis. How can I help you today?') {
+                addMessage('assistant', 'Hello! My name is Noesis. How can I help you today?');
+            }
+            
+            // Only attempt to auto-save if Firebase is initialized and user is authenticated
+            if (userId && db) { 
+                await autoSaveConversation();
+            }
+        }
+
+
+        /**
+         * Automatically saves or updates the current conversation to Firestore.
+         * Will also trigger LLM to generate a title if it's a new conversation
+         * and enough messages have been exchanged.
+         */
+        async function autoSaveConversation() {
+            if (!userId || chatHistory.length === 0 || !db) {
+                // If not authenticated, no messages, or Firestore not initialized, don't attempt to save
+                console.log("Skipping auto-save: No user, no messages, or DB not ready.");
+                return;
+            }
+
+            try {
+                const conversationsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/conversations`);
+                
+                let conversationName = "Chat - " + new Date().toLocaleString(); // Default name
+                
+                // Only generate a new title if it's a new conversation OR if the existing one has a default name
+                let shouldGenerateTitle = false;
+                if (!currentConversationId && chatHistory.length >= MIN_MESSAGES_FOR_TITLE) {
+                    shouldGenerateTitle = true;
+                } else if (currentConversationId && chatHistory.length >= MIN_MESSAGES_FOR_TITLE) {
+                    const docRef = doc(conversationsCollectionRef, currentConversationId);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists() && docSnap.data().name.startsWith("Chat - ")) {
+                        shouldGenerateTitle = true;
+                    } else if (docSnap.exists()) {
+                        conversationName = docSnap.data().name; // Keep existing non-default title
+                    }
+                }
+
+                if (shouldGenerateTitle) {
+                    const generatedTitle = await generateConversationTitle(chatHistory);
+                    if (generatedTitle) {
+                        conversationName = generatedTitle;
+                    }
+                }
+                
+                if (currentConversationId) {
+                    // Update existing conversation
+                    const docRef = doc(conversationsCollectionRef, currentConversationId);
+                    await updateDoc(docRef, {
+                        name: conversationName,
+                        messages: JSON.stringify(chatHistory), // Stringify array of objects
+                        updatedAt: new Date().toISOString()
+                    });
+                    // console.log("Conversation updated automatically:", currentConversationId);
+                } else {
+                    // Create new conversation
+                    const docRef = await addDoc(conversationsCollectionRef, {
+                        name: conversationName,
+                        messages: JSON.stringify(chatHistory), // Stringify array of objects
+                        createdAt: new Date().toISOString(), // Add creation timestamp
+                        updatedAt: new Date().toISOString() // Add update timestamp
+                    });
+                    currentConversationId = docRef.id; // Assign the new conversation ID
+                    // console.log("New conversation created automatically:", currentConversationId);
+                }
+            } catch (error) {
+                console.error("Error auto-saving conversation:", error);
+                showCustomModal("Save Error", "Failed to auto-save conversation. Please check console for details.");
+            }
+        }
+
+        /**
+         * Loads a specific conversation from Firestore and displays it.
+         * @param {string} conversationId - The ID of the conversation to load.
+         */
+        async function loadConversation(conversationId) {
+            if (!userId || !db) {
+                showCustomModal("Error", "User not authenticated or Firestore not initialized.");
+                return;
+            }
+
+            try {
+                loadingConversation = true;
+                const docRef = doc(db, `artifacts/${appId}/users/${userId}/conversations`, conversationId);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    const loadedMessages = JSON.parse(data.messages);
+                    
+                    // Clear current chat and load new history
+                    document.getElementById('chat-history-display').innerHTML = '';
+                    chatHistory.length = 0; // Clear array while maintaining reference
+
+                    loadedMessages.forEach(msg => {
+                        const sender = msg.role === 'user' ? 'user' : 'assistant';
+                        // Pass the stored sources to addMessage for display
+                        addMessage(sender, msg.parts[0].text, msg.sources || []); 
+                    });
+                    chatHistory.push(...loadedMessages); // Explicitly add all loaded messages after display
+                    currentConversationId = conversationId;
+                    
+                    // Switch to chat display view
+                    document.getElementById('initial-greeting-screen').classList.add('hidden');
+                    document.getElementById('chat-history-display').classList.remove('hidden');
+                    document.getElementById('main-chat-input-area').classList.remove('hidden');
+                    document.getElementById('conversation-modal').classList.add('hidden'); // Close modal
+                    
+                    showCustomModal("Conversation Loaded", `"${data.name}" loaded successfully.`);
+                    firstMessageSent = true; // Assume conversation has already started
+                } else {
+                    showCustomModal("Not Found", "Conversation not found.");
+                }
+            } catch (error) {
+                console.error("Error loading conversation:", error);
+                showCustomModal("Load Error", `Failed to load conversation: ${error.message}`);
+            } finally {
+                loadingConversation = false;
+            }
+        }
+
+
+        /**
+         * Deletes a specific conversation from Firestore.
+         * @param {string} conversationId - The ID of the conversation to delete.
+         * @param {string} conversationName - The name of the conversation for confirmation.
+         */
+        async function deleteConversation(conversationId, conversationName) {
+            if (!userId || !db) {
+                showCustomModal("Error", "User not authenticated or Firestore not initialized.");
+                return;
+            }
+
+            showCustomModal(
+                "Confirm Deletion",
+                `Are you sure you want to delete the conversation "${conversationName}"? This action cannot be undone.`,
+                true, // showConfirmButtons = true
+                async () => {
+                    // On Confirm (Delete)
+                    try {
+                        const docRef = doc(db, `artifacts/${appId}/users/${userId}/conversations`, conversationId);
+                        await deleteDoc(docRef);
+                        showCustomModal("Deleted", `Conversation "${conversationName}" deleted successfully.`);
+                        displaySavedConversations(); // Refresh the list
+                        if (currentConversationId === conversationId) {
+                            startNewConversation(); // If deleted current, start fresh
+                        }
+                    } catch (error) {
+                        console.error("Error deleting conversation:", error);
+                        showCustomModal("Deletion Error", `Failed to delete conversation: ${error.message}`);
+                    }
+                },
+                () => {
+                    // On Cancel
+                    console.log("Deletion cancelled.");
+                }
+            );
+        }
+
+        /**
+         * Fetches and displays the list of saved conversations in the modal.
+         */
+        async function displaySavedConversations() {
+            const savedConversationsList = document.getElementById('saved-conversations-list');
+            savedConversationsList.innerHTML = '<li class="text-gray-500 text-center">Loading conversations...</li>';
+
+            if (!userId || !db) {
+                savedConversationsList.innerHTML = '<li class="text-gray-500 text-center">Please authenticate to see saved conversations.</li>';
+                return;
+            }
+
+            try {
+                const conversationsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/conversations`);
+                // Note: orderBy is commented out as per instructions, but kept as a reference for typical use.
+                // const q = query(conversationsCollectionRef, orderBy('updatedAt', 'desc')); 
+                const querySnapshot = await getDocs(conversationsCollectionRef);
+
+                savedConversationsList.innerHTML = ''; // Clear loading message
+
+                if (querySnapshot.empty) {
+                    savedConversationsList.innerHTML = '<li class="text-gray-500 text-center">No saved conversations yet.</li>';
+                    return;
+                }
+
+                querySnapshot.docs.forEach(doc => {
+                    const conversationData = doc.data();
+                    const listItem = document.createElement('li');
+                    listItem.classList.add('flex', 'items-center', 'justify-between', 'bg-gray-100', 'p-3', 'rounded-lg', 'shadow-sm', 'hover:bg-gray-200', 'transition', 'duration-150', 'text-sm');
+                    listItem.innerHTML = `
+                        <span class="truncate cursor-pointer flex-1" title="${conversationData.name}">${conversationData.name}</span>
+                        <div class="flex items-center space-x-2 ml-4">
+                            <button class="load-conversation-btn bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition duration-150" data-id="${doc.id}" title="Load Conversation">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 0020 13a8 8 0 01-9.311 6.945M12 4v12m0 0l-3-3m3 3l3-3" />
+                                </svg>
+                            </button>
+                            <button class="delete-conversation-btn bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition duration-150" data-id="${doc.id}" data-name="${conversationData.name}" title="Delete Conversation">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                    savedConversationsList.appendChild(listItem);
+                });
+
+                // Add event listeners for newly created buttons
+                document.querySelectorAll('.load-conversation-btn').forEach(button => {
+                    button.onclick = (e) => loadConversation(e.currentTarget.dataset.id);
+                });
+                document.querySelectorAll('.delete-conversation-btn').forEach(button => {
+                    button.onclick = (e) => deleteConversation(e.currentTarget.dataset.id, e.currentTarget.dataset.name);
+                });
+
+            } catch (error) {
+                console.error("Error fetching conversations:", error);
+                savedConversationsList.innerHTML = `<li class="text-red-500 text-center">Error loading conversations: ${error.message}</li>`;
+                showCustomModal("Error", "Failed to retrieve saved conversations. Please check console.");
+            }
+        }
+
+
+        /**
+         * Calls the Gemini API to generate a conversation title based on chat history.
+         * @param {Array} history - The chat history array.
+         * @returns {Promise<string|null>} - The generated title or null on error.
+         */
+        async function generateConversationTitle(history) {
+            if (history.length < MIN_MESSAGES_FOR_TITLE) {
+                return null;
+            }
+
+            const prompt = `Based on the following chat history, suggest a concise and descriptive title (2-5 words). Only output the title, nothing else.\n\nChat history:\n${JSON.stringify(history.slice(-5))}`; // Use last 5 messages for context
+
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 20, // Short title
+                }
+            };
+
+            try {
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    let title = result.candidates[0].content.parts[0].text.trim();
+                    // Clean up potential markdown formatting if the model adds it
+                    title = title.replace(/^["'`\s]+|["'`\s]+$/g, '');
+                    return title;
+                }
+                console.warn("Could not generate conversation title:", result);
+                return null;
+            } catch (error) {
+                console.error("Error generating conversation title:", error);
+                return null;
+            }
+        }
+
+        /**
+         * Sends a message to the AI and handles the response.
+         * Routes to backend for 'deep_search', direct Gemini API for others.
+         * @param {string} userMessage - The message from the user.
+         */
+        async function sendMessageToGemini(userMessage) {
+            addMessage('user', userMessage); // Display user message immediately
+
+            const loadingMessageSpan = document.getElementById('loading-message');
+            document.getElementById('loading-indicator').classList.remove('hidden'); // Show global loading
+            document.getElementById('user-input').disabled = true; // Disable input during processing
+            document.getElementById('send-button').disabled = true; // Disable send button
+
+            try {
+                let assistantResponse = "";
+                let sourcesToDisplay = [];
+                // Instruction for generating essay-like responses for General and Library modes
+                const essayPromptInstruction = "Please provide a comprehensive answer, formatted as a small essay with coherent paragraphs. Avoid using bullet points unless specifically asked for or if the information naturally lends itself to a list (e.g., a short, clear list of items). Ensure clear transitions between paragraphs.";
+
+
+                if (currentSearchMode === 'deep_search') {
+                    // Send to backend for deep search (which can use Tavily etc.)
+                    // The server.js is NOT changed here as per user request.
+                    loadingMessageSpan.textContent = "Performing deep research via backend...";
+                    const payload = {
+                        query: userMessage,
+                        chatHistory: chatHistory, // Send full chat history for context
+                        currentSearchMode: currentSearchMode // Indicate deep search
+                    };
+                    const response = await fetch(`${BACKEND_URL}/api/ask`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(`Backend deep search error: ${errorData.error || response.statusText}. Ensure backend is running and configured.`);
+                    }
+                    const data = await response.json();
+                    assistantResponse = data.answer;
+                    sourcesToDisplay = data.sources || [];
+
+                } else {
+                    // Direct Gemini API call for 'general' or 'library' context
+                    loadingMessageSpan.textContent = "Getting AI response..."; 
+                    let promptContent = userMessage;
+
+                    // If Library Context is enabled and we have uploaded text, incorporate it into the prompt
+                    if (currentSearchMode === 'library' && uploadedLibraryText) {
+                        promptContent = `Using the following library documents, answer the user's question. If the answer is not in the documents, state that you don't know or can't find it in the provided context.
+                        \n\n--- Library Documents ---\n${uploadedLibraryText}\n\n--- Conversation Context ---\n${chatHistory.map(entry => `${entry.role}: ${entry.parts[0].text}`).join('\n')}\n\nUser's Current Query: ${userMessage}`;
+                    } else {
+                        // For general chat, just use the current message and previous chat history as context
+                        promptContent = `Conversation Context:\n${chatHistory.map(entry => `${entry.role}: ${entry.parts[0].text}`).join('\n')}\n\nUser's Current Query: ${userMessage}`;
+                    }
+                    
+                    // Append the instruction for essay-like responses for frontend modes
+                    let finalPrompt = `${promptContent}\n\n${essayPromptInstruction}`;
+
+                    // Prepare chat history for Gemini API
+                    let geminiChatHistory = chatHistory.map(entry => ({
+                        role: entry.role === 'user' ? 'user' : 'model', // Ensure roles are 'user' or 'model'
+                        parts: entry.parts
+                    }));
+                    geminiChatHistory.push({ role: "user", parts: [{ text: finalPrompt }] }); // Use finalPrompt here
+
+                    const payload = {
+                        contents: geminiChatHistory,
+                        generationConfig: {
+                            temperature: 0.7,
+                            maxOutputTokens: 1000,
+                        }
+                    };
+
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        assistantResponse = result.candidates[0].content.parts[0].text;
+                    } else {
+                        assistantResponse = "I'm sorry, I couldn't get a response from the AI. The model might not have generated any content or there was an issue.";
+                        console.error("Gemini API returned no candidates or content:", result);
+                    }
+                }
+                
+                addMessage('assistant', assistantResponse, sourcesToDisplay);
+
+            } catch (error) {
+                addMessage('assistant', `An error occurred while trying to get a response: ${error.message}.`);
+                console.error("Error in sendMessageToGemini:", error);
+                showCustomModal("Error", `Failed to get response: ${error.message}. Please check your browser console for more details and ensure your backend is running for Deep Search.`);
+            } finally {
+                document.getElementById('loading-indicator').classList.add('hidden'); // Hide global loading
+                document.getElementById('user-input').disabled = false; // Enable input
+                document.getElementById('send-button').disabled = false; // Enable send button
+                document.getElementById('user-input').value = ''; // Clear input field
+                document.getElementById('user-input').focus(); // Focus input field
+                autoSaveConversation(); // Auto-save after each interaction
+            }
+        }
+
+        /**
+         * Handles the user's input, either from the initial screen or the main chat.
+         * Transfers to the main chat view after the first message.
+         * @param {string} inputElementId - The ID of the input element (e.g., 'initial-user-input' or 'user-input').
+         */
+        async function handleUserInput(inputElementId) {
+            const inputField = document.getElementById(inputElementId);
+            const userMessage = inputField.value.trim();
+
+            if (userMessage) {
+                if (!firstMessageSent) {
+                    // Transition from initial greeting screen to main chat
+                    document.getElementById('initial-greeting-screen').classList.add('hidden');
+                    document.getElementById('chat-history-display').classList.remove('hidden');
+                    document.getElementById('main-chat-input-area').classList.remove('hidden');
+                    firstMessageSent = true;
+                }
+                
+                // Clear the input field immediately
+                inputField.value = '';
+                await sendMessageToGemini(userMessage);
+            } else {
+                showCustomModal("Empty Message", "Please type a message before sending.");
+            }
+        }
+
+        /**
+         * Summarizes the current chat history using the Gemini API.
+         */
+        async function summarizeChat() {
+            if (chatHistory.length < 2) {
+                showCustomModal("Not Enough Chat", "Please have more conversation before summarizing.");
+                return;
+            }
+
+            const loadingMessageSpan = document.getElementById('loading-message');
+            loadingMessageSpan.textContent = "Summarizing chat...";
+            document.getElementById('loading-indicator').classList.remove('hidden');
+            document.getElementById('user-input').disabled = true;
+            document.getElementById('send-button').disabled = true;
+
+            try {
+                // Ensure the chat history is properly formatted for the prompt
+                const fullChatText = chatHistory.map(entry => {
+                    let text = `${entry.role}: ${entry.parts[0].text}`;
+                    return text;
+                }).join('\n');
+                
+                // Keep bullet points for summary as it's a specific summary request
+                const prompt = `Summarize the following conversation concisely. Format the summary using bullet points (e.g., '- item').\n\n${fullChatText}`;
+
+                const payload = {
+                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.5,
+                        maxOutputTokens: 500,
+                    }
+                };
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const summary = result.candidates[0].content.parts[0].text;
+                    showCustomModal("Conversation Summary", summary);
+                } else {
+                    // More specific error message
+                    showCustomModal("Summary Failed", "Could not generate summary. The AI model might not have returned content or there was an unexpected response structure. Please try again.");
+                    console.error("Gemini API returned no candidates or content for summary:", result);
+                }
+            } catch (error) {
+                console.error("Error summarizing chat:", error);
+                showCustomModal("Error", `Failed to summarize chat: ${error.message}. Please check your browser console for more details.`);
+            } finally {
+                document.getElementById('loading-indicator').classList.add('hidden');
+                document.getElementById('user-input').disabled = false;
+                document.getElementById('send-button').disabled = false;
+            }
+        }
+
+        /**
+         * Asks the Gemini API to suggest next relevant questions based on chat history.
+         */
+        async function suggestNextQuestions() {
+            if (chatHistory.length < 1) {
+                showCustomModal("No Chat History", "Start a conversation to get suggested questions.");
+                return;
+            }
+
+            const loadingMessageSpan = document.getElementById('loading-message');
+            loadingMessageSpan.textContent = "Suggesting questions...";
+            document.getElementById('loading-indicator').classList.remove('hidden');
+            document.getElementById('user-input').disabled = true;
+            document.getElementById('send-button').disabled = true;
+
+            try {
+                const fullChatText = chatHistory.map(entry => `${entry.role}: ${entry.parts[0].text}`).join('\n');
+                // Keep numbered list for suggestions as it's a specific formatting request
+                const prompt = `Based on the following conversation, suggest 3-5 relevant follow-up questions. Provide them as a numbered list.`;
+
+                const payload = {
+                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 300,
+                    }
+                };
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const suggestions = result.candidates[0].content.parts[0].text;
+                    showCustomModal("Suggested Questions", suggestions);
+                } else {
+                    // More specific error message
+                    showCustomModal("Suggestions Failed", "Could not suggest questions. The AI model might not have returned content or there was an unexpected response structure. Please try again.");
+                    console.error("Gemini API returned no candidates or content for suggestions:", result);
+                }
+            } catch (error) {
+                console.error("Error suggesting questions:", error);
+                showCustomModal("Error", `Failed to suggest questions: ${error.message}. Please check your browser console for more details.`);
+            } finally {
+                document.getElementById('loading-indicator').classList.add('hidden');
+                document.getElementById('user-input').disabled = false;
+                document.getElementById('send-button').disabled = false;
+            }
+        }
+
+        /**
+         * Rewrites the last message in the chat history with a specified tone.
+         */
+        async function rewriteLastMessage() {
+            if (chatHistory.length === 0) {
+                showCustomModal("No Message to Rewrite", "There's no message in the chat to rewrite.");
+                return;
+            }
+
+            const tone = await showInputModal("Rewrite Message", "How would you like to rewrite the last message? (e.g., 'more formal', 'simpler', 'more friendly')", "e.g., more formal");
+            if (!tone) {
+                return; // User cancelled
+            }
+
+            const lastMessage = chatHistory[chatHistory.length - 1].parts[0].text;
+            const loadingMessageSpan = document.getElementById('loading-message');
+            loadingMessageSpan.textContent = "Rewriting message...";
+            document.getElementById('loading-indicator').classList.remove('hidden');
+            document.getElementById('user-input').disabled = true;
+            document.getElementById('send-button').disabled = true;
+
+            try {
+                const prompt = `Rewrite the following text to be ${tone}:\n\n"${lastMessage}"`;
+                const payload = {
+                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 500,
+                    }
+                };
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const rewrittenMessage = result.candidates[0].content.parts[0].text;
+                    addMessage('assistant', `*Rewritten (${tone}):* ${rewrittenMessage}`);
+                } else {
+                    showCustomModal("Rewrite Failed", "Could not rewrite message. The AI model might not have returned content or there was an unexpected response structure. Please try again.");
+                    console.error("Gemini API returned no candidates or content for rewrite:", result);
+                }
+            } catch (error) {
+                console.error("Error rewriting message:", error);
+                showCustomModal("Error", `Failed to rewrite message: ${error.message}. Please check your browser console for more details.`);
+            } finally {
+                document.getElementById('loading-indicator').classList.add('hidden');
+                document.getElementById('user-input').disabled = false;
+                document.getElementById('send-button').disabled = false;
+            }
+        }
+
+        /**
+         * Translates the last message in the chat history to a specified language.
+         */
+        async function translateMessage() {
+            if (chatHistory.length === 0) {
+                showCustomModal("No Message to Translate", "There's no message in the chat to translate.");
+                return;
+            }
+
+            const targetLanguage = await showInputModal("Translate Message", "Enter the target language (e.g., 'Spanish', 'French', 'Japanese'):", "e.g., Spanish");
+            if (!targetLanguage) {
+                return; // User cancelled
+            }
+
+            const lastMessage = chatHistory[chatHistory.length - 1].parts[0].text;
+            const loadingMessageSpan = document.getElementById('loading-message');
+            loadingMessageSpan.textContent = `Translating to ${targetLanguage}...`;
+            document.getElementById('loading-indicator').classList.remove('hidden');
+            document.getElementById('user-input').disabled = true;
+            document.getElementById('send-button').disabled = true;
+
+            try {
+                const prompt = `Translate the following text to ${targetLanguage}:\n\n"${lastMessage}"`;
+                const payload = {
+                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.2, // Lower temperature for more accurate translation
+                        maxOutputTokens: 500,
+                    }
+                };
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const translatedMessage = result.candidates[0].content.parts[0].text;
+                    addMessage('assistant', `*Translated to ${targetLanguage}:* ${translatedMessage}`);
+                } else {
+                    showCustomModal("Translation Failed", "Could not translate message. The AI model might not have returned content or there was an unexpected response structure. Please try again.");
+                    console.error("Gemini API returned no candidates or content for translation:", result);
+                }
+            } catch (error) {
+                console.error("Error translating message:", error);
+                showCustomModal("Error", `Failed to translate message: ${error.message}. Please check your browser console for more details.`);
+            } finally {
+                document.getElementById('loading-indicator').classList.add('hidden');
+                document.getElementById('user-input').disabled = false;
+                document.getElementById('send-button').disabled = false;
+            }
+        }
+
+
+        /**
+         * Handles the PDF file upload, processes them, and updates the UI.
+         */
+        async function handlePdfUpload(event) {
+            const files = event.target.files;
+            const uploadedFileList = document.getElementById('uploaded-file-list');
+            const modalUploadedFileList = document.getElementById('modal-uploaded-file-list');
+            const uploadStatus = document.getElementById('upload-status');
+            const modalUploadStatus = document.getElementById('modal-upload-status');
+            const loadingIndicator = document.getElementById('loading-indicator'); // General loading indicator
+            const modalLoadingIndicator = document.getElementById('modal-loading-indicator'); // PDF-specific modal indicator
+            const loadingMessageSpan = document.getElementById('loading-message'); // General loading message
+
+            if (files.length === 0) {
+                uploadStatus.textContent = "No PDFs selected yet.";
+                modalUploadStatus.textContent = "No PDFs selected yet.";
+                return;
+            }
+
+            uploadedFileList.innerHTML = ''; // Clear previous list
+            modalUploadedFileList.innerHTML = '';
+            uploadedLibraryText = ""; // Clear existing library text
+            documentChunks = []; // Clear existing chunks
+
+            loadingIndicator.classList.remove('hidden'); // Show general indicator
+            loadingMessageSpan.textContent = "Processing PDFs..."; // Set general message
+            modalLoadingIndicator.classList.remove('hidden'); // Show PDF-specific modal indicator
+            uploadStatus.textContent = `Processing ${files.length} PDF(s)...`;
+            modalUploadStatus.textContent = `Processing ${files.length} PDF(s)...`;
+
+            // Check if pdfjsLib is loaded before proceeding
+            if (typeof pdfjsLib === 'undefined' || !pdfjsLib.getDocument) {
+                const errorMessage = "PDF.js library is not loaded. Cannot process PDFs.";
+                console.error(errorMessage);
+                showCustomModal("PDF Library Error", errorMessage + " Please ensure your internet connection is stable or try refreshing the page.");
+                loadingIndicator.classList.add('hidden');
+                modalLoadingIndicator.classList.add('hidden');
+                uploadStatus.textContent = "PDF processing failed.";
+                modalUploadStatus.textContent = "PDF processing failed.";
+                return;
+            }
+
+
+            for (const file of files) {
+                const listItem = document.createElement('li');
+                listItem.textContent = `Processing: ${file.name}...`;
+                listItem.classList.add('floating-list-item');
+                uploadedFileList.appendChild(listItem);
+                modalUploadedFileList.appendChild(listItem.cloneNode(true)); // Add to modal list too
+
+                try {
+                    const text = await processPdfText(file);
+                    uploadedLibraryText += text + "\n\n"; // Append text
+                    documentChunks.push(...chunkDocument(text)); // Add chunks
+                    listItem.textContent = `✓ ${file.name}`;
+                    listItem.classList.add('text-green-600'); // Indicate success
+                    // Update the corresponding item in the modal list
+                    const modalItemToUpdate = Array.from(modalUploadedFileList.children).find(item => item.textContent.includes(`Processing: ${file.name}`));
+                    if (modalItemToUpdate) {
+                        modalItemToUpdate.textContent = `✓ ${file.name}`;
+                        modalItemToUpdate.classList.add('text-green-600');
+                    }
+                } catch (error) {
+                    listItem.textContent = `✗ ${file.name} (Error)`;
+                    listItem.classList.add('text-red-600'); // Indicate error
+                    // Update the corresponding item in the modal list
+                    const modalItemToUpdate = Array.from(modalUploadedFileList.children).find(item => item.textContent.includes(`Processing: ${file.name}`));
+                    if (modalItemToUpdate) {
+                        modalItemToUpdate.textContent = `✗ ${file.name} (Error)`;
+                        modalItemToUpdate.classList.add('text-red-600');
+                    }
+                    console.error(`Error processing PDF ${file.name}:`, error);
+                    showCustomModal("PDF Processing Error", `Failed to process ${file.name}. Please check the console for details.`);
+                }
+            }
+
+            // Hide general loading indicator if it was shown for PDF processing
+            loadingIndicator.classList.add('hidden'); 
+            modalLoadingIndicator.classList.add('hidden'); // Hide PDF-specific modal indicator
+            uploadStatus.textContent = `Processed ${files.length} PDF(s).`;
+            modalUploadStatus.textContent = `Processed ${files.length} PDF(s).`;
+
+            if (uploadedLibraryText.length > 0) {
+                document.getElementById('library-content-display').textContent = uploadedLibraryText; // Update view content
+                showCustomModal("Library Updated", "PDF(s) processed and added to library context.");
+            } else {
+                showCustomModal("No PDFs Processed", "No readable text extracted from selected PDFs.");
+            }
+        }
+
+        /**
+         * Extracts text content from a PDF file using PDF.js.
+         * @param {File} pdfFile - The PDF file object.
+         * @returns {Promise<string>} - A promise that resolves with the extracted text.
+         */
+        async function processPdfText(pdfFile) {
+            console.log(`Starting to process PDF: ${pdfFile.name}`);
+            try {
+                const arrayBuffer = await pdfFile.arrayBuffer();
+                console.log(`ArrayBuffer created for ${pdfFile.name}, size: ${arrayBuffer.byteLength} bytes.`);
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                console.log(`PDF document loaded for ${pdfFile.name}, number of pages: ${pdf.numPages}`);
+                let fullText = '';
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    fullText += pageText + '\n';
+                    console.log(`Page ${i} of ${pdf.numPages} processed for ${pdfFile.name}.`);
+                }
+                console.log(`Finished processing PDF: ${pdfFile.name}. Total text length: ${fullText.length}`);
+                return fullText;
+            } catch (error) {
+                console.error(`Error in processPdfText for ${pdfFile.name}:`, error);
+                throw new Error(`Failed to extract text from PDF: ${error.message}`);
+            }
+        }
+
+        /**
+         * Chunks a long document into smaller, manageable pieces.
+         * This is a simple chunking strategy; more advanced methods might use
+         * sentence tokenization or semantic chunking.
+         * @param {string} documentText - The full text of the document.
+         * @param {number} chunkSize - Maximum characters per chunk.
+         * @returns {Array<string>} - An array of text chunks.
+         */
+        function chunkDocument(documentText, chunkSize = 1500) {
+            const chunks = [];
+            let currentPosition = 0;
+            while (currentPosition < documentText.length) {
+                let endPosition = currentPosition + chunkSize;
+                // Try to break at a natural boundary (e.g., end of sentence/paragraph)
+                if (endPosition < documentText.length) {
+                    const potentialBreak = documentText.indexOf('.', endPosition);
+                    if (potentialBreak !== -1 && potentialBreak < currentPosition + chunkSize * 1.2) { // Allow slight overflow
+                        endPosition = potentialBreak + 1;
+                    }
+                }
+                chunks.push(documentText.substring(currentPosition, endPosition).trim());
+                currentPosition = endPosition;
+            }
+            return chunks;
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initializeFirebase(); // Initialize Firebase on load
+            
+            // Initial greeting screen input and button
+            document.getElementById('initial-send-button').addEventListener('click', () => handleUserInput('initial-user-input'));
+            document.getElementById('initial-user-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleUserInput('initial-user-input');
+            });
+
+            // Main chat input and send button
+            document.getElementById('send-button').addEventListener('click', () => handleUserInput('user-input'));
+            document.getElementById('user-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleUserInput('user-input');
+            });
+
+            // Sidebar New Chat button
+            document.getElementById('new-chat-sidebar-button').addEventListener('click', startNewConversation);
+
+            // Library modal buttons
+            document.getElementById('open-library-modal-button').addEventListener('click', () => {
+                document.getElementById('library-modal').classList.remove('hidden');
+                // Set initial tab to "Upload PDFs" when opening the modal
+                document.getElementById('tab-upload-pdfs').click(); 
+            });
+            document.getElementById('close-library-modal-button').addEventListener('click', () => {
+                document.getElementById('library-modal').classList.add('hidden');
+            });
+            document.getElementById('pdf-file-input').addEventListener('change', handlePdfUpload);
+
+            // Library modal tab switching
+            document.getElementById('tab-upload-pdfs').addEventListener('click', () => {
+                document.getElementById('section-upload-pdfs').classList.remove('hidden');
+                document.getElementById('section-view-content').classList.add('hidden');
+                document.getElementById('tab-upload-pdfs').classList.add('current-tab-active-style');
+                document.getElementById('tab-view-content').classList.remove('current-tab-active-style');
+            });
+
+            document.getElementById('tab-view-content').addEventListener('click', () => {
+                document.getElementById('section-view-content').classList.remove('hidden');
+                document.getElementById('section-upload-pdfs').classList.add('hidden');
+                document.getElementById('tab-view-content').classList.add('current-tab-active-style');
+                document.getElementById('tab-upload-pdfs').classList.remove('current-tab-active-style');
+                document.getElementById('library-content-display').textContent = uploadedLibraryText || "No library content available. Please upload PDFs first.";
+            });
+
+
+            // Conversation modal buttons
+            document.getElementById('show-previous-conversations-button').addEventListener('click', () => {
+                document.getElementById('conversation-modal').classList.remove('hidden');
+                displaySavedConversations(); // Populate the list when opening
+            });
+            document.getElementById('close-conversation-modal-button').addEventListener('click', () => {
+                document.getElementById('conversation-modal').classList.add('hidden');
+            });
+
+
+            // Context buttons with unclick functionality
+            document.getElementById('library-context-button').addEventListener('click', () => {
+                if (currentSearchMode === 'library') {
+                    currentSearchMode = 'general'; // Unclick
+                } else {
+                    currentSearchMode = 'library';
+                }
+                updateContextButtonStyling();
+                if (currentSearchMode === 'library' && !uploadedLibraryText) {
+                    showCustomModal("No Library Content", "Please upload PDFs to the library first to use this context mode.");
+                }
+            });
+            document.getElementById('deep-search-button').addEventListener('click', () => {
+                if (currentSearchMode === 'deep_search') {
+                    currentSearchMode = 'general'; // Unclick
+                } else {
+                    currentSearchMode = 'deep_search';
+                }
+                updateContextButtonStyling();
+            });
+            document.getElementById('initial-library-context-button').addEventListener('click', () => {
+                if (currentSearchMode === 'library') {
+                    currentSearchMode = 'general'; // Unclick
+                } else {
+                    currentSearchMode = 'library';
+                }
+                updateContextButtonStyling();
+                if (currentSearchMode === 'library' && !uploadedLibraryText) {
+                    showCustomModal("No Library Content", "Please upload PDFs to the library first to use this context mode.");
+                }
+            });
+            document.getElementById('initial-deep-search-button').addEventListener('click', () => {
+                if (currentSearchMode === 'deep_search') {
+                    currentSearchMode = 'general'; // Unclick
+                } else {
+                    currentSearchMode = 'deep_search';
+                }
+                updateContextButtonStyling();
+            });
+
+            // LLM-powered feature buttons
+            document.getElementById('summarize-chat-button').addEventListener('click', summarizeChat);
+            document.getElementById('suggest-questions-button').addEventListener('click', suggestNextQuestions);
+            document.getElementById('rewrite-last-message-button').addEventListener('click', rewriteLastMessage); // New event listener
+            document.getElementById('translate-message-button').addEventListener('click', translateMessage); // New event listener
+
+            // Initial styling update
+            updateContextButtonStyling();
+        });
+    </script>
+</body>
+</html>
